@@ -1,7 +1,11 @@
 let syncing = null;
 let registrations = [];
 const initialState = {rules:[],auth:null,cache:null,lastError:null,demo:false,currency:'USD'};
-async function state() { return {...initialState,...await browser.storage.local.get(Object.keys(initialState))}; }
+async function state() {
+  const s={...initialState,...await browser.storage.local.get(Object.keys(initialState))};
+  s.rules=s.rules.map(BudgetCore.migrateRule);
+  return s;
+}
 async function refresh() {
   if (syncing) return syncing;
   syncing = (async()=> {
@@ -21,7 +25,7 @@ async function configureScripts() {
   for (const r of registrations) await r.unregister();
   registrations = [];
   const s = await state();
-  const hosts = [...new Set(s.rules.filter(r=>r.enabled).flatMap(r=>BudgetCore.origins(r.pattern)))];
+  const hosts = [...new Set(s.rules.filter(r=>r.enabled).flatMap(BudgetCore.ruleOrigins))];
   for (const origin of hosts) {
     if (await browser.permissions.contains({origins:[origin]})) {
       registrations.push(await browser.contentScripts.register({matches:[origin],js:[{file:'content.js'}],runAt:'document_idle'}));
@@ -29,13 +33,13 @@ async function configureScripts() {
   }
   // Apply newly saved rules to already open pages as well as future navigations.
   for (const tab of await browser.tabs.query({})) {
-    if (!tab.id || !s.rules.some(r=>r.enabled && BudgetCore.matches(r.pattern,tab.url))) continue;
+    if (!tab.id || !s.rules.some(r=>r.enabled && BudgetCore.matchesRule(r,tab.url))) continue;
     try { await browser.tabs.executeScript(tab.id,{file:'content.js'}); } catch { /* Restricted browser pages cannot be injected. */ }
   }
 }
 async function banner(href) {
   let s = await state();
-  const rules = s.rules.filter(r=>r.enabled && BudgetCore.matches(r.pattern,href));
+  const rules = s.rules.filter(r=>r.enabled && BudgetCore.matchesRule(r,href));
   if (!rules.length) return null;
   if (!s.cache || s.cache.month !== BudgetCore.monthKey() || Date.now()-s.cache.syncedAt > 15*60000) {
     try { await refresh(); } catch { /* Keep same-month cached data clearly marked. */ }
@@ -69,15 +73,26 @@ browser.runtime.onMessage.addListener(async (message,sender) => {
       case 'disconnect': await browser.storage.local.set({auth:null,demo:false,cache:null,lastError:null}); break;
       case 'refresh': await refresh(); break;
       case 'saveRule': {
-        const s = await state(), pattern = BudgetCore.parsePattern(message.page);
-        if (!await browser.permissions.contains({origins:BudgetCore.origins(pattern)})) throw new Error('Website permission was not granted. Save again and allow access.');
+        const s = await state(), patterns = BudgetCore.parsePages(message.pages || [message.page]);
+        if (!await browser.permissions.contains({origins:BudgetCore.ruleOrigins({patterns})})) throw new Error('Website permission was not granted. Save again and allow access.');
         const valid = new Set((s.cache?.groups||[]).flatMap(g=>[g.id,...g.categories.map(c=>c.id)]));
         const categoryIds = [...new Set(message.categoryIds)].filter(id=>valid.has(id));
         if (!categoryIds.length) throw new Error('Select at least one budget group or category.');
-        const rule = {id:message.id || crypto.randomUUID(),pattern,categoryIds,enabled:true};
+        const previous=s.rules.find(r=>r.id===message.id);
+        const rule = {id:message.id || crypto.randomUUID(),name:(message.name || '').trim(),patterns,categoryIds,enabled:previous?.enabled ?? true};
         const rules = s.rules.filter(r=>r.id!==rule.id);
         rules.push(rule);
         await browser.storage.local.set({rules});
+        await configureScripts();
+        break;
+      }
+      case 'addPage': {
+        const s=await state(), pattern=BudgetCore.parsePattern(message.page);
+        if(!await browser.permissions.contains({origins:BudgetCore.origins(pattern)})) throw new Error('Website permission was not granted. Try again and allow access.');
+        const rule=s.rules.find(r=>r.id===message.id);
+        if(!rule)throw new Error('This rule no longer exists. Reopen the menu.');
+        if(!rule.patterns.some(p=>p.label===pattern.label))rule.patterns.push(pattern);
+        await browser.storage.local.set({rules:s.rules});
         await configureScripts();
         break;
       }
@@ -90,7 +105,12 @@ browser.runtime.onMessage.addListener(async (message,sender) => {
         if (!['USD','CAD'].includes(message.currency)) throw new Error('Unsupported currency.');
         await browser.storage.local.set({currency:message.currency}); break;
       }
-      case 'options': await browser.runtime.openOptionsPage(); break;
+      case 'options':
+        if(message.page) {
+          const pattern=BudgetCore.parsePattern(message.page);
+          await browser.tabs.create({url:browser.runtime.getURL('options.html')+'?page='+encodeURIComponent(pattern.label)});
+        }else await browser.runtime.openOptionsPage();
+        break;
       default: throw new Error('Unknown extension action.');
     }
     return {ok:true};

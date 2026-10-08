@@ -7,7 +7,14 @@ manifest.permissions.push('*://localhost/*');manifest.background.scripts.push('s
 fs.writeFileSync(path.join(dir,'manifest.json'),JSON.stringify(manifest));
 fs.copyFileSync(path.resolve(__dirname,'../tests/firefox-smoke.js'),path.join(dir,'smoke.js'));
 fs.writeFileSync(path.join(dir,'smoke-settings.html'),'<!doctype html><html><head><meta charset="utf-8"></head><body><script src="smoke-settings.js"></script></body></html>');
-fs.writeFileSync(path.join(dir,'smoke-settings.js'),`browser.runtime.sendMessage({type:'state'}).then(reply=>{browser.runtime.sendMessage({type:'smoke-result',passed:reply.ok && reply.data.demo && !reply.data.auth?.token});});`);
+fs.copyFileSync(path.resolve(__dirname,'../tests/firefox-settings.js'),path.join(dir,'smoke-settings.js'));
+fs.copyFileSync(path.resolve(__dirname,'../tests/firefox-options-ui.js'),path.join(dir,'smoke-options-ui.js'));
+const optionsFile=path.join(dir,'options.html');
+fs.writeFileSync(optionsFile,fs.readFileSync(optionsFile,'utf8').replace('</body>','<script src="smoke-options-ui.js"></script></body>'));
+
+fs.copyFileSync(path.resolve(__dirname,'../tests/firefox-popup-ui.js'),path.join(dir,'smoke-popup-ui.js'));
+const popupFile=path.join(dir,'popup.html');
+fs.writeFileSync(popupFile,fs.readFileSync(popupFile,'utf8').replace('</body>','<script src="smoke-popup-ui.js"></script></body>'));
 let child,timer,finished=false;
 function finish(code){if(finished)return;finished=true;clearTimeout(timer);child?.kill('SIGTERM');server.close();setTimeout(()=>{fs.rmSync(dir,{recursive:true,force:true});process.exit(code);},500);}
 const server=http.createServer((req,res)=>{

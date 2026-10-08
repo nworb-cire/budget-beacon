@@ -10,8 +10,8 @@ A local Firefox extension that shows your remaining Monarch budget on shopping p
 2. Click **Load Temporary Add-on…**.
 3. Select `/home/eric/.t3/projects/walmart-budget/extension/manifest.json`.
 4. The settings page opens. Sign in to [Monarch](https://app.monarch.com) in this Firefox profile, then choose **Connect browser session**. Alternatively, use email/password and your current MFA authenticator code.
-5. Click **Add website**, enter `walmart.com/cart`, check the desired groups or categories, and **Save website**. Allow Firefox's website permission prompt.
-6. Visit or refresh the matching page. Use the toolbar extension button to reopen settings.
+5. Click **Add rule**, optionally give it a name, add one or more pages such as `walmart.com/cart`, choose groups or categories, and **Save rule**. Allow Firefox's website permission prompt.
+6. Visit or refresh the matching page. Use the toolbar extension button to add the current page to an existing rule, create a new rule with the page prefilled, or reopen settings. Connection setup hides once connected; use **Disconnect** in the sidebar to reconnect.
 
 Temporary installation lasts until Firefox restarts. Load the manifest again after a restart. A permanent installation requires Mozilla signing; this prototype does not change Firefox's signature protections. Firefox desktop 140+ is required.
 
@@ -31,7 +31,7 @@ The extension has no runtime npm dependencies and needs no server. The preview c
 
 ## Behavior
 
-- Rules match the specified domain (including its `www` form) and path plus child paths. `/cart` matches `/cart/checkout`, not `/cartoon`. Query strings and fragments do not affect matching. Other subdomains need their own rule. HTTP and HTTPS are supported; an explicit port must match.
+- Each rule links multiple pages to multiple categories and can have an optional name. Existing single-page rules migrate automatically. Rules match the specified domain (including its `www` form) and path plus child paths. `/cart` matches `/cart/checkout`, not `/cartoon`. Query strings and fragments do not affect matching. Other subdomains need their own rule. HTTP and HTTPS are supported; an explicit port must match.
 - All enabled rules matching the page contribute their selected categories. Overlaps and parent/child selections are counted once.
 - Monarch groups are the parent level; categories are the child level. Selecting a category-budgeted group includes all its children. For a group-level budget, selecting the group uses Monarch's group balance. Child categories without a separate balance cannot supply a total.
 - Uses Monarch's `remainingAmount` for the local current calendar month, preserving rollover and negative balances. Missing or removed categories show an unavailable message, rather than an incomplete dollar total.

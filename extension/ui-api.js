@@ -10,14 +10,15 @@ const UI = (()=> {
       return reply.data;
     }
     switch(message.type) {
-      case 'state': return previewState;
+      case 'state': return {...previewState,rules:previewState.rules.map(BudgetCore.migrateRule)};
       case 'connect': throw new Error('This is the local UI preview. Connect Monarch from the installed Firefox extension.');
       case 'demo': previewState={...previewState,auth:null,demo:true,cache:BudgetCore.demo(),lastError:null};break;
       case 'refresh': if(!previewState.demo) throw new Error('Enable demo data first.');previewState.cache=BudgetCore.demo();break;
       case 'disconnect': previewState={...previewState,auth:null,demo:false,cache:null};break;
       case 'saveRule': {
         if(!message.categoryIds.length) throw new Error('Select at least one budget group or category.');
-        const rule={id:message.id||crypto.randomUUID(),pattern:BudgetCore.parsePattern(message.page),categoryIds:[...new Set(message.categoryIds)],enabled:true};
+        const previous=previewState.rules.find(r=>r.id===message.id);
+        const rule={id:message.id||crypto.randomUUID(),name:(message.name||'').trim(),patterns:BudgetCore.parsePages(message.pages || [message.page]),categoryIds:[...new Set(message.categoryIds)],enabled:previous?.enabled ?? true};
         previewState.rules=previewState.rules.filter(r=>r.id!==rule.id).concat(rule);break;
       }
       case 'deleteRule': previewState.rules=previewState.rules.filter(r=>r.id!==message.id);break;
@@ -26,9 +27,9 @@ const UI = (()=> {
     }
     localStorage.setItem(key,JSON.stringify(previewState));
   }
-  async function grant(pattern) {
+  async function grant(patterns) {
     if(!isExtension) return true;
-    return browser.permissions.request({origins:BudgetCore.origins(pattern)});
+    return browser.permissions.request({origins:BudgetCore.ruleOrigins({patterns:Array.isArray(patterns)?patterns:[patterns]})});
   }
   return {send,grant};
 })();

@@ -23,6 +23,23 @@
     // Firefox validates each requested scheme against optional_permissions.
     return hosts.flatMap(host => [`http://${host}/*`, `https://${host}/*`]);
   }
+  function patterns(rule) { return rule.patterns || (rule.pattern ? [rule.pattern] : []); }
+  function matchesRule(rule, href) { return patterns(rule).some(p => matches(p, href)); }
+  function parsePages(pages) {
+    const unique = new Map();
+    for (const page of pages) {
+      if (!page.trim()) continue;
+      const pattern = parsePattern(page);
+      unique.set(pattern.label, pattern);
+    }
+    if (!unique.size) throw new Error('Add at least one website and page.');
+    return [...unique.values()];
+  }
+  function ruleOrigins(rule) { return [...new Set(patterns(rule).flatMap(origins))]; }
+  function migrateRule(rule) {
+    const {pattern, ...rest} = rule;
+    return {...rest, name:rule.name || '', patterns:patterns(rule)};
+  }
   function number(value) { if (value === null || value === undefined || value === '') return null; const n = Number(value); return Number.isFinite(n) ? n : null; }
   function normalize(data, month) {
     if (!data?.categoryGroups || !data?.budgetData) throw new Error('Monarch returned an unexpected budget response.');
@@ -54,7 +71,7 @@
       {id:'group:shopping',name:'Shopping',groupBudget:false,remaining:null,categories:[{id:'category:household',name:'Household',planned:150,spent:64.12,remaining:85.88},{id:'category:clothing',name:'Clothing',planned:100,spent:125,remaining:-25}]}
     ]};
   }
-  const api = {monthKey,parsePattern,matches,origins,normalize,total,demo};
+  const api = {monthKey,parsePattern,matches,origins,patterns,matchesRule,parsePages,ruleOrigins,migrateRule,normalize,total,demo};
   root.BudgetCore = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(globalThis);

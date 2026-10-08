@@ -26,11 +26,17 @@
     const old=BudgetCore.demo('2000-01-01');await browser.storage.local.set({cache:old,auth:null,demo:false});
     const expired=await banner('http://localhost:4174/cart');check(Boolean(expired.error)&&expired.remaining===undefined,'Previous-month balance is never displayed');
     await browser.storage.local.set({demo:true,auth:{mode:'token',token:'smoke-test-secret'},cache:BudgetCore.demo()});
-    let settingsPassed=false;
-    browser.runtime.onMessage.addListener(message=>{if(message.type==='smoke-result')settingsPassed=message.passed;});
+    let settingsPassed=false, optionsPassed=false, popupPassed=false, settingsError=null, popupError=null;
+    browser.runtime.onMessage.addListener(message=>{if(message.type==='smoke-result'){settingsPassed=message.passed;settingsError=message.error;}if(message.type==='smoke-options')optionsPassed=message.passed;if(message.type==='smoke-popup'){popupPassed=message.passed;popupError=message.error;}});
     const settings=await browser.tabs.create({url:browser.runtime.getURL('smoke-settings.html')});
     for(let i=0;i<20&&!settingsPassed;i++)await pause(250);
-    check(settingsPassed,'Extension settings messages work and auth token is redacted');
+    check(settingsPassed,'Many-to-many saves, existing-rule attachment, legacy migration and credential redaction'+(settingsError?' ('+settingsError+')':''));
+    for(let i=0;i<20&&!optionsPassed;i++)await pause(250);
+    check(optionsPassed,'New-rule page is prefilled; connection setup and promotional sections are hidden');
+    await browser.tabs.update(tab.id,{active:true});
+    await browser.tabs.create({url:browser.runtime.getURL('popup.html'),active:false});
+    for(let i=0;i<25&&!popupPassed;i++)await pause(250);
+    check(popupPassed,'Popup captures active page and adds it to the chosen existing rule'+(popupError?' ('+popupError+')':''));
     await fetch('http://localhost:4174/report',{method:'POST',body:JSON.stringify({ok:true,checks:report})});
   }catch(error){await fetch('http://localhost:4174/report',{method:'POST',body:JSON.stringify({ok:false,checks:report,error:error.message})});}
 })();

@@ -39,3 +39,19 @@ test('requested website permissions use the exact schemes declared in the manife
   for(const origin of origins)assert.ok(manifest.optional_permissions.includes(origin.startsWith('https:')?'https://*/*':'http://*/*'));
   assert.deepEqual(core.origins(core.parsePattern('localhost:4174/cart')),['http://localhost/*','https://localhost/*']);
 });
+test('many-to-many rules match every page and deduplicate page entries',()=>{
+  const patterns=core.parsePages(['walmart.com/cart','target.com/cart','www.walmart.com/cart?x=1','']);
+  assert.equal(patterns.length,2);
+  const rule={patterns,categoryIds:['category:groceries','category:household']};
+  assert.equal(core.matchesRule(rule,'https://target.com/cart/checkout'),true);
+  assert.equal(core.matchesRule(rule,'https://www.walmart.com/cart'),true);
+  assert.equal(core.matchesRule(rule,'https://target.com/account'),false);
+  assert.equal(core.total(core.demo().groups,rule.categoryIds).remaining,498.3);
+  assert.throws(()=>core.parsePages(['','  ']));
+});
+test('legacy single-page rules migrate without losing names, categories, or enabled state',()=>{
+  const legacy={id:'old',pattern:core.parsePattern('walmart.com/cart'),categoryIds:['category:groceries'],enabled:false};
+  const migrated=core.migrateRule(legacy);
+  assert.equal(migrated.pattern,undefined);assert.equal(migrated.patterns[0].label,'walmart.com/cart');assert.equal(migrated.name,'');assert.equal(migrated.enabled,false);
+  assert.deepEqual(migrated.categoryIds,legacy.categoryIds);assert.equal(core.matchesRule(legacy,'https://walmart.com/cart'),true);
+});

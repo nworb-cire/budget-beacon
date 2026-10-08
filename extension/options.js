@@ -12,35 +12,43 @@ async function load() {
   const connected=Boolean(current.auth||current.demo);
   $('connection-badge').textContent=current.demo?'Demo mode':current.auth?'Monarch connected':'Not connected';
   $('connection-badge').className='badge'+(connected?' active':'');
-  $('connection-summary').textContent=current.demo?'You’re exploring with sample balances. Connect Monarch when you’re ready.':current.auth?'Your monthly budget is connected. Refresh anytime to bring in the latest spending.':'Connect your account to see this month’s categories and remaining balances.';
+  $('connection-setup').hidden=connected;
+  $('disconnect').hidden=!connected;
+  $('sidebar-status').textContent=current.demo?'Demo data':current.auth?'Monarch connected':'Not connected';
   $('connected-actions').hidden=!connected;
   $('currency').value=current.currency||'USD';
   $('sync-label').textContent=current.cache?`${current.demo?'Demo · ':''}Updated ${new Date(current.cache.syncedAt).toLocaleString()}`:'No budget synced yet';
   $('rules').replaceChildren();
   if(!current.rules.length) {
-    const empty=element('div','empty');empty.append(element('b',null,'Your next checkout, with a little context.'));empty.append(element('span',null,'Add your first website to keep your budget in sight.'));$('rules').append(empty);
+    const empty=element('div','empty');empty.append(element('b',null,'No rules yet'));empty.append(element('span',null,'Add a rule to link pages to budget categories.'));$('rules').append(empty);
   }
   for(const rule of current.rules) renderRule(rule);
   if(current.lastError)notice(current.lastError,true);
-  preview(current.rules.find(r=>r.enabled));
+
 }
 function names(ids) {return (current.cache?.groups||[]).flatMap(g=>[{id:g.id,name:g.name},...g.categories]).filter(c=>ids.includes(c.id)).map(c=>c.name);}
 function renderRule(rule) {
   const row=element('div','rule'+(!rule.enabled?' disabled':''));row.append(element('div','rule-icon','↗'));
-  const main=element('div','rule-main');main.append(element('strong',null,rule.pattern.label));main.append(element('small',null,names(rule.categoryIds).join(' + ')||'Connect to load categories'));row.append(main);
+  const main=element('div','rule-main');main.append(element('strong',null,rule.name || rule.patterns.map(p=>p.label).join(', ')));
+  if(rule.name)main.append(element('small',null,rule.patterns.map(p=>p.label).join(' · ')));
+  main.append(element('small',null,names(rule.categoryIds).join(' + ')||'Connect to load categories'));row.append(main);
   const result=current.cache && current.cache.month===BudgetCore.monthKey()?BudgetCore.total(current.cache.groups,rule.categoryIds):null;
   row.append(element('div','rule-total'+(result?.remaining<0?' negative':''),result&&!result.missing.length?money(result.remaining):'—'));
   const actions=element('div','rule-actions');
-  const toggle=element('button','toggle',rule.enabled?'On':'Off');toggle.type='button';toggle.setAttribute('aria-label',`${rule.enabled?'Disable':'Enable'} ${rule.pattern.label}`);toggle.onclick=()=>action(()=>UI.send({type:'toggleRule',id:rule.id}),toggle);
+  const toggle=element('button','toggle',rule.enabled?'On':'Off');toggle.type='button';toggle.setAttribute('aria-label',`${rule.enabled?'Disable':'Enable'} ${rule.name || rule.patterns[0]?.label}`);toggle.onclick=()=>action(()=>UI.send({type:'toggleRule',id:rule.id}),toggle);
   const edit=element('button',null,'Edit');edit.type='button';edit.onclick=()=>openEditor(rule);
   const remove=element('button',null,'Delete');remove.type='button';remove.onclick=()=>action(async()=>{await UI.send({type:'deleteRule',id:rule.id});if(editingId===rule.id)$('rule-editor').hidden=true;},remove);
   actions.append(toggle,edit,remove);row.append(actions);$('rules').append(row);
 }
-function openEditor(rule) {
+function openEditor(rule, page) {
   if(!current.cache){notice('Connect Monarch or try demo data to choose your categories.',true);return;}
   editingId=rule?.id||null;selected=new Set(rule?.categoryIds||[]);$('rule-notice').hidden=true;
-  $('editor-title').textContent=rule?'Edit website':'Add a website';$('page').value=rule?.pattern.label||'';$('category-search').value='';$('rule-editor').hidden=false;
-  renderCategories();$('rule-editor').scrollIntoView({behavior:'smooth',block:'center'});$('page').focus();
+  $('editor-title').textContent=rule?'Edit rule':'Add rule';$('rule-name').value=rule?.name||'';
+  $('pages').replaceChildren();
+  const pages=rule?rule.patterns.map(p=>p.label):[page||''];
+  for(const value of pages)addPageInput(value);
+  $('category-search').value='';$('rule-editor').hidden=false;
+  renderCategories();$('rule-editor').scrollIntoView({behavior:'smooth',block:'center'});$('pages').querySelector('input').focus();
 }
 function renderCategories() {
   $('categories').replaceChildren();const filter=$('category-search').value.toLowerCase();
@@ -60,13 +68,14 @@ function renderCategories() {
   if(!$('categories').children.length)$('categories').append(element('div','field-help','No matching categories.'));
   $('selection-count').textContent=`${selected.size} selected`;
 }
-function preview(rule) {
-  $('preview-url').textContent=rule?.pattern.label||'walmart.com/cart';
-  const result=rule&&current.cache?BudgetCore.total(current.cache.groups,rule.categoryIds):null;
-  $('preview-kicker').textContent=result?(current.demo?'BANNER PREVIEW · DEMO DATA':'BANNER PREVIEW'):'BANNER PREVIEW · EXAMPLE';
-  $('preview-amount').textContent=result&&!result.missing.length?money(result.remaining):result?'Unavailable':'$412.42';
-  $('preview-categories').textContent=result?(result.missing.length?`Missing: ${result.missing.join(', ')}`:result.used.map(c=>c.name).join(' + ')):'Groceries';
+function addPageInput(value='') {
+  const row=element('div','page-row'), input=document.createElement('input');
+  input.value=value;input.placeholder='walmart.com/cart';input.setAttribute('aria-label','Website and page');
+  const remove=element('button','link-button','Remove');remove.type='button';
+  remove.onclick=()=>{row.remove();if(!$('pages').children.length)addPageInput();};
+  row.append(input,remove);$('pages').append(row);
 }
+$('add-page').onclick=()=>addPageInput();
 $('demo').onclick=e=>action(async()=>{await UI.send({type:'demo'});notice('Demo mode enabled. These are sample balances, not your Monarch budget.');},e.currentTarget);
 $('browser-connect').onclick=e=>action(async()=>{await UI.send({type:'connect',mode:'cookie'});notice('Connected to your Monarch browser session.');$('login-form').hidden=true;},e.currentTarget);
 $('show-login').onclick=()=>{$('login-form').hidden=!$('login-form').hidden;};
@@ -84,26 +93,31 @@ $('rule-form').onsubmit=async e=>{
   e.preventDefault();
   const button=$('save-rule');
   if(button.disabled)return;
-  let pattern;
+  let patterns;
   try {
-    if(!$('page').value.trim())throw new Error('Enter a website and page, such as walmart.com/cart.');
-    pattern=BudgetCore.parsePattern($('page').value);
+    patterns=BudgetCore.parsePages([...$('pages').querySelectorAll('input')].map(input=>input.value));
     if(!selected.size)throw new Error('Select at least one group or category.');
   }catch(error){ruleNotice(error.message,true);return;}
-  const rule={type:'saveRule',id:editingId,page:pattern.label,categoryIds:[...selected]};
+  const rule={type:'saveRule',id:editingId,name:$('rule-name').value,pages:patterns.map(p=>p.label),categoryIds:[...selected]};
   button.disabled=true;button.textContent='Saving…';
   try {
     // Start the permission request inside the submit gesture, before any await.
-    const permission=UI.grant(pattern);
+    const permission=UI.grant(patterns);
     ruleNotice('Waiting for website access. Allow the Firefox permission prompt to continue.');
-    if(!await permission)throw new Error('Website access was not allowed. Click Save website again and allow Firefox access.');
+    if(!await permission)throw new Error('Website access was not allowed. Click Save rule again and allow Firefox access.');
     ruleNotice('Saving your website…');
     await UI.send(rule);
     await load();
     $('rule-editor').hidden=true;
-    notice('Website saved. The banner will appear on matching pages.');
+    notice('Rule saved.');
     $('rules').scrollIntoView({behavior:'smooth',block:'nearest'});
   }catch(error){ruleNotice(error.message,true);}
-  finally{button.disabled=false;button.textContent='Save website';}
+  finally{button.disabled=false;button.textContent='Save rule';}
+};
+let pendingPage=new URLSearchParams(location.search).get('page');
+const originalLoad=load;
+load=async()=>{
+  await originalLoad();
+  if(pendingPage && current.cache){const page=pendingPage;pendingPage=null;openEditor(null,page);}
 };
 load().catch(e=>notice(e.message,true));
