@@ -1,6 +1,6 @@
 // Firefox fetch cannot set Cookie/Origin/Referer directly. Only this add-on's
 // own Monarch requests are adapted; website requests are never intercepted.
-browser.webRequest.onBeforeSendHeaders.addListener(async details => {
+if (!globalThis.BudgetNativeTransport) browser.webRequest.onBeforeSendHeaders.addListener(async details => {
   if (!details.originUrl?.startsWith(browser.runtime.getURL(''))) return;
   let headers = details.requestHeaders || [];
   const cookieMode = headers.some(h => h.name.toLowerCase() === 'x-budget-beacon-cookie-mode');
@@ -28,8 +28,8 @@ const Monarch = (() => {
   }`;
   async function request(path, body, headers = {}, cookie = false) {
     let response;
-    try { response = await fetch(base+path, {method:'POST', credentials:cookie?'include':'omit', headers:{'Content-Type':'application/json','monarch-client':'web','monarch-client-version':'2025.05',...headers},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)}); }
-    catch { throw new Error('Could not reach Monarch. Check your connection and try again.'); }
+    try { response = globalThis.BudgetNativeTransport ? await BudgetNativeTransport.request(path,body,headers,cookie) : await fetch(base+path, {method:'POST', credentials:cookie?'include':'omit', headers:{'Content-Type':'application/json','monarch-client':'web','monarch-client-version':'2025.05',...headers},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)}); }
+    catch(error) { if(globalThis.BudgetNativeTransport)throw error;throw new Error('Could not reach Monarch. Check your connection and try again.'); }
     let data; try { data = await response.json(); } catch { throw new Error('Monarch blocked this request. Try connecting through your signed-in browser session.'); }
     if (!response.ok) {
       if (data.error_code === 'CAPTCHA_REQUIRED') throw new Error('Monarch requires a CAPTCHA. Sign in on the Monarch website, then choose Connect browser session.');

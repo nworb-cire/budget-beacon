@@ -1,5 +1,4 @@
 let syncing = null;
-let registrations = [];
 const initialState = {rules:[],auth:null,cache:null,lastError:null,demo:false,currency:'USD'};
 async function state() {
   const s={...initialState,...await browser.storage.local.get(Object.keys(initialState))};
@@ -22,20 +21,11 @@ async function refresh() {
   return syncing;
 }
 async function configureScripts() {
-  for (const r of registrations) await r.unregister();
-  registrations = [];
-  const s = await state();
-  const hosts = [...new Set(s.rules.filter(r=>r.enabled).flatMap(BudgetCore.ruleOrigins))];
-  for (const origin of hosts) {
-    if (await browser.permissions.contains({origins:[origin]})) {
-      registrations.push(await browser.contentScripts.register({matches:[origin],js:[{file:'content.js'}],runAt:'document_idle'}));
-    }
-  }
-  // Apply newly saved rules to already open pages as well as future navigations.
-  for (const tab of await browser.tabs.query({})) {
-    if (!tab.id || !s.rules.some(r=>r.enabled && BudgetCore.matchesRule(r,tab.url))) continue;
-    try { await browser.tabs.executeScript(tab.id,{file:'content.js'}); } catch { /* Restricted browser pages cannot be injected. */ }
-  }
+  const s=await state();
+  const rules=s.rules.filter(r=>r.enabled);
+  const hosts=[...new Set(rules.flatMap(BudgetCore.ruleOrigins))];
+  const tabs=(await browser.tabs.query({})).filter(tab=>tab.id && rules.some(r=>BudgetCore.matchesRule(r,tab.url))).map(tab=>tab.id);
+  await ScriptPlatform.configure(hosts,tabs);
 }
 async function banner(href) {
   let s = await state();

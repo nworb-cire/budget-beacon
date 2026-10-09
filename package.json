@@ -6,9 +6,13 @@
     "test": "node --test tests/*.test.cjs",
     "lint": "web-ext lint --source-dir extension",
     "build": "web-ext build --source-dir extension --artifacts-dir dist --overwrite-dest",
-    "firefox": "web-ext run --source-dir extension",
+    "firefox": "firefox-esr",
     "preview": "node scripts/preview.cjs",
-    "test:firefox": "node scripts/firefox-smoke.cjs"
+    "test:firefox": "node scripts/firefox-smoke.cjs",
+    "firefox:dev": "web-ext run --source-dir extension",
+    "install:plan": "python3 scripts/install-esr.py --allow-unsigned",
+    "build:safari": "node scripts/build-safari.cjs",
+    "package:safari": "node scripts/package-safari.cjs"
   },
   "devDependencies": {
     "web-ext": "^10.7.0"

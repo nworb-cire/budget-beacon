@@ -4,6 +4,40 @@
 
 A local Firefox extension that shows your remaining Monarch budget on shopping pages you choose. Settings use forms and category checkboxes; no JSON editing is needed.
 
+## Safari (macOS)
+
+A Safari port is included. It keeps the same GUI, many-to-many rules, popup page actions, and banners, with a native Monarch request adapter and MV3 background worker. On a Mac with Xcode and Node.js, run `npm run package:safari` to generate the app project, then configure signing and enable the built extension in your normal Safari profiles. See [Safari build and installation instructions](safari/README.md).
+
+The portable build is available via `npm run build:safari`. Safari/Xcode compilation, signing, and live Safari account authentication cannot be verified from this Linux workspace.
+
+## Persistent installation in your normal Firefox ESR (native Linux)
+
+The system installer uses `/etc/firefox/policies/policies.json` and puts a packaged copy in `/usr/local/share/budget-beacon`. It installs in normal Firefox ESR profiles at startup, including newly created profiles; it does not launch or create a development profile. Each profile keeps its own Monarch connection and rules. Flatpak/Snap installations and other machines require their own installation configuration.
+
+The prototype is unsigned. The following command explicitly allows unsigned add-ons across ESR profiles, lowering the browser's add-on signature protection:
+
+```sh
+sudo python3 /home/eric/.t3/projects/walmart-budget/scripts/install-esr.py --allow-unsigned --apply
+```
+
+Fully quit and reopen your normal Firefox ESR afterward. Check **Budget Beacon** in `about:addons`, and check `about:policies` for policy errors. An existing policy file is backed up before edits, and unrelated entries are retained. A per-installation `distribution/policies.json` can take precedence over the shared system policy; sandboxed browser builds need their own policy location.
+
+To review without changing anything:
+
+```sh
+npm run install:plan
+```
+
+For Mozilla-signed distribution without disabling signature verification, obtain a signed XPI with the same extension ID and use:
+
+```sh
+sudo python3 scripts/install-esr.py --xpi /absolute/path/to/signed-budget-beacon.xpi --apply
+```
+
+Re-run the installer after source changes to deploy an updated package; the package's changed content produces a new installation URL. Restart Firefox to apply it. To undo installation, remove the `budget-beacon@local.prototype` entry from the system policy, restore its previous `xpinstall.signatures.required` preference (or remove the installer-added entry), then remove the add-on in `about:addons`. The saved policy backup records the previous configuration.
+
+Mozilla documentation: [Linux system policies](https://support.mozilla.org/en-US/kb/customizing-firefox-using-policiesjson), [extension installation policy](https://firefox-admin-docs.mozilla.org/reference/policies/extensionsettings/), and [unsigned ESR extensions](https://extensionworkshop.com/documentation/enterprise/enterprise-distribution/).
+
 ## Install in your current Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`.
@@ -13,13 +47,14 @@ A local Firefox extension that shows your remaining Monarch budget on shopping p
 5. Click **Add rule**, optionally give it a name, add one or more pages such as `walmart.com/cart`, choose groups or categories, and **Save rule**. Allow Firefox's website permission prompt.
 6. Visit or refresh the matching page. Use the toolbar extension button to add the current page to an existing rule, create a new rule with the page prefilled, or reopen settings. Connection setup hides once connected; use **Disconnect** in the sidebar to reconnect.
 
-Temporary installation lasts until Firefox restarts. Load the manifest again after a restart. A permanent installation requires Mozilla signing; this prototype does not change Firefox's signature protections. Firefox desktop 140+ is required.
+Temporary installation lasts until Firefox restarts. Load the manifest again after a restart. For persistent installation, use the system installer above (unsigned ESR opt-in) or Mozilla signing. Firefox desktop 140+ is required.
 
 ## Run locally
 
 ```sh
 npm ci
-npm run firefox       # Opens a separate development Firefox with the add-on installed
+npm run firefox       # Opens your normal Firefox ESR; persistent install must be applied first
+npm run firefox:dev   # Explicit development-only profile with a temporary add-on
 npm run preview       # http://localhost:4173 — settings UI with demo data only
 npm test              # Budget calculations, URL rules, and authentication adapter tests
 npm run test:firefox   # Actual headless Firefox integration test, isolated temporary profile
@@ -27,7 +62,7 @@ npm run lint          # Mozilla extension validator
 npm run build         # dist/budget_beacon-0.1.0.zip, unsigned
 ```
 
-The extension has no runtime npm dependencies and needs no server. The preview cannot connect to Monarch; real authentication is available only in the installed extension. **Try with demo data** explicitly replaces the extension's connection with sample balances; disconnect removes credentials and cached balances, retaining page rules.
+Neither browser build has runtime npm dependencies or needs a separate server. Safari embeds a native HTTPS request handler in its containing app. The preview cannot connect to Monarch; real authentication is available only in the installed extension. **Try with demo data** explicitly replaces the extension's connection with sample balances; disconnect removes credentials and cached balances, retaining page rules.
 
 ## Behavior
 
